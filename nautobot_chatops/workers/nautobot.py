@@ -1144,6 +1144,16 @@ def get_circuit_connections(dispatcher, circuit_id):
 def more_cowbell(dispatcher, *args):
     """We need more cowbell!"""
 
+    dispatcher.send_blocks(
+        dispatcher.command_response_header(
+            "nautobot",  # command
+            "more-cowbell", # sub-command
+            [], # args
+            "cowbell", # description
+            nautobot_logo(dispatcher), # image_logo
+        )
+    )
+
     blocks = [
         dispatcher.markdown_block(f"MORE COWBELL!!!"),
     ]
