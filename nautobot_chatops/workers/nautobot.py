@@ -1001,30 +1001,6 @@ def about(dispatcher, *args):
     return CommandStatusChoices.STATUS_SUCCEEDED
 
 
-def analyze_circuit_endpoints(endpoint):
-    """Analyzes a circuit's endpoint and returns info about what object the endpoint connects to"""
-
-    if type(endpoint) in [Interface, FrontPort, RearPort]:
-        # Put into format: object.device_name
-        info = f"Device: {endpoint.device.name}  Interface: {endpoint.name}"
-    elif isinstance(endpoint, CircuitTermination):
-        # Return circuit ID of endpoint circuit
-        info = f"Circuit with circuit ID {endpoint.circuit.cid}"
-
-    return info
-
-
-def prompt_for_circuit(action_id, help_text, dispatcher, circuits=None, offset=0):
-    """Prompt the user to select a valid circuit from a drop-down menu."""
-    if circuits is None:
-        circuits = Circuit.objects.all().order_by("provider", "cid")
-    if not circuits:
-        dispatcher.send_error("No circuits were found")
-        return (CommandStatusChoices.STATUS_FAILED, "No circuits were found")
-    choices = [(f"{circuit.provider.name}: {circuit.cid}", circuit.cid) for circuit in circuits]
-    return dispatcher.prompt_from_menu(action_id, help_text, choices, offset=offset)
-
-
 @subcommand_of("nautobot")
 def get_manufacturer_summary(dispatcher):
     """Provides summary of each manufacturer and how many devices have that manufacturer"""
@@ -1074,6 +1050,29 @@ def get_manufacturer_summary(dispatcher):
     dispatcher.send_large_table(header, rows)
     return CommandStatusChoices.STATUS_SUCCEEDED
 
+
+def analyze_circuit_endpoints(endpoint):
+    """Analyzes a circuit's endpoint and returns info about what object the endpoint connects to"""
+
+    if type(endpoint) in [Interface, FrontPort, RearPort]:
+        # Put into format: object.device_name
+        info = f"Device: {endpoint.device.name}  Interface: {endpoint.name}"
+    elif isinstance(endpoint, CircuitTermination):
+        # Return circuit ID of endpoint circuit
+        info = f"Circuit with circuit ID {endpoint.circuit.cid}"
+
+    return info
+
+
+def prompt_for_circuit(action_id, help_text, dispatcher, circuits=None, offset=0):
+    """Prompt the user to select a valid circuit from a drop-down menu."""
+    if circuits is None:
+        circuits = Circuit.objects.all().order_by("provider", "cid")
+    if not circuits:
+        dispatcher.send_error("No circuits were found")
+        return (CommandStatusChoices.STATUS_FAILED, "No circuits were found")
+    choices = [(f"{circuit.provider.name}: {circuit.cid}", circuit.cid) for circuit in circuits]
+    return dispatcher.prompt_from_menu(action_id, help_text, choices, offset=offset)
 
 @subcommand_of("nautobot")
 def get_circuit_connections(dispatcher, circuit_id):
@@ -1155,7 +1154,7 @@ def more_cowbell(dispatcher, *args):
     )
 
     blocks = [
-        dispatcher.markdown_block(f"MORE COWBELL!!!"),
+        dispatcher.markdown_block(f"*MORE COWBELL!!!*"),
     ]
 
     dispatcher.send_blocks(blocks)
