@@ -1066,9 +1066,9 @@ def analyze_circuit_endpoints(endpoint):
 
 def prompt_for_circuit(action_id, help_text, dispatcher, circuits=None, offset=0):
     """Prompt the user to select a valid circuit from a drop-down menu."""
-    if circuits is None:
+    if circuits is None:  # A circuit was not provided; define a selector for user to select a circuit
         circuits = Circuit.objects.all().order_by("provider", "cid")
-    if not circuits:
+    if not circuits:  # No circuit objects were found in database; notify user
         dispatcher.send_error("No circuits were found")
         return (CommandStatusChoices.STATUS_FAILED, "No circuits were found")
     choices = [(f"{circuit.provider.name}: {circuit.cid}", circuit.cid) for circuit in circuits]
