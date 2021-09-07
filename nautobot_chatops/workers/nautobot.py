@@ -1074,9 +1074,11 @@ def prompt_for_circuit(action_id, help_text, dispatcher, circuits=None, offset=0
     choices = [(f"{circuit.provider.name}: {circuit.cid}", circuit.cid) for circuit in circuits]
     return dispatcher.prompt_from_menu(action_id, help_text, choices, offset=offset)
 
+
 @subcommand_of("nautobot")
 def get_circuit_connections(dispatcher, circuit_id):
-    """For a given circuit, find the objects the circuit connects to"""
+    """For a given circuit, find the object(s) the circuit connects to"""
+
     if menu_item_check(circuit_id):
         prompt_for_circuit(
             "nautobot get-circuit-connections",
@@ -1115,14 +1117,15 @@ def get_circuit_connections(dispatcher, circuit_id):
 
     dispatcher.send_blocks(
         dispatcher.command_response_header(
-            "nautobot",
-            "get-circuit-connections",
-            [("Circuit ID", circuit.cid)],
-            "circuit connection info",
-            nautobot_logo(dispatcher),
+            "nautobot",  # command
+            "get-circuit-connections",  # sub-command
+            [("Circuit ID", circuit.cid)],  # args
+            "circuit connection info",  # description used in reply
+            nautobot_logo(dispatcher),  # image_logo
         )
     )
 
+    # Column headers for table output
     header = ["Side", "Connecting Object"]
     rows = [
         (
@@ -1146,10 +1149,10 @@ def more_cowbell(dispatcher, *args):
     dispatcher.send_blocks(
         dispatcher.command_response_header(
             "nautobot",  # command
-            "more-cowbell", # sub-command
+            "more-cowbell",  # sub-command
             [], # args
-            "cowbell", # description
-            nautobot_logo(dispatcher), # image_logo
+            "cowbell",  # description
+            nautobot_logo(dispatcher),  # image_logo
         )
     )
 
