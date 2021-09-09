@@ -5,7 +5,7 @@ from django.db.models import Count
 from django.contrib.contenttypes.models import ContentType
 from django_rq import job
 
-from nautobot.dcim.models.device_components import Interface
+from nautobot.dcim.models.device_components import Interface, FrontPort, RearPort
 from nautobot.circuits.models import Circuit, CircuitType, Provider, CircuitTermination
 from nautobot.dcim.choices import DeviceStatusChoices
 from nautobot.dcim.models import Device, Site, DeviceRole, DeviceType, Manufacturer, Rack, Region, Cable
@@ -998,4 +998,143 @@ def about(dispatcher, *args):
     ]
 
     dispatcher.send_blocks(blocks)
+    return CommandStatusChoices.STATUS_SUCCEEDED
+
+
+@subcommand_of("nautobot")
+def more_cowbell(dispatcher, *args):
+    """We need more cowbell!"""
+
+    dispatcher.send_blocks(
+        dispatcher.command_response_header(
+            "nautobot",  # command
+            "more-cowbell",  # sub-command
+            [], # args
+            "cowbell",  # description
+            nautobot_logo(dispatcher),  # image_logo
+        )
+    )
+
+    blocks = [
+        dispatcher.markdown_block(f"*MORE COWBELL!!!*"),
+    ]
+
+    dispatcher.send_blocks(blocks)
+    return CommandStatusChoices.STATUS_SUCCEEDED
+
+
+def prompt_for_circuit(action_id, help_text, dispatcher, provider=None, circuits=None, offset=0):
+    """Prompt the user to select a valid circuit from a drop-down menu."""
+    if provider is None:  # A circuit provider was not specified; notify user of error
+        dispatcher.send_error("No providers were found")
+        return (CommandStatusChoices.STATUS_FAILED, "No Circuit Providers were found")
+    if circuits is None:  # A circuit was not provided; provide list of circuits for user to choose from
+        circuits = Circuit.objects.filter(provider__name=provider)
+    if not circuits:  # There were no Circuit objects found; notify user
+        dispatcher.send_error("No circuits were found")
+        return (CommandStatusChoices.STATUS_FAILED, "No circuits were found")
+    choices = [(f"{circuit.provider.slug}: {circuit.cid}", circuit.cid) for circuit in circuits]
+    return dispatcher.prompt_from_menu(action_id, help_text, choices, offset=offset)
+
+
+def analyze_circuit_endpoints(endpoint):
+    """Analyzes a circuit's endpoint and returns info about what object the endpoint connects to."""
+    if type(endpoint) in [Interface, FrontPort, RearPort]:
+        # Put into format: object.device_name
+        info = f"Device: {endpoint.device.name}  Interface: {endpoint.name}"
+    elif isinstance(endpoint, CircuitTermination):
+        # Return circuit ID of endpoint circuit
+        info = f"Circuit with circuit ID {endpoint.circuit.cid}"
+
+    return info
+
+
+@subcommand_of("nautobot")
+def get_circuit_connections(dispatcher, provider_slug, circuit_id):
+    """For a given circuit, find the objects the circuit connects to."""
+    if menu_item_check(provider_slug):
+        provider_options = [
+            (provider.slug, provider.slug)
+            for provider in
+            Provider.objects.annotate(Count("circuits")).filter(circuits__count__gt=0).order_by("slug", "name")
+        ]
+        if not provider_options:  # No providers with associated circuits exist
+            no_provider_error_msg = "No Providers with circuits were found"
+            dispatcher.send_error(no_provider_error_msg)
+            return (CommandStatusChoices.STATUS_SUCCEEDED, no_provider_error_msg)
+
+        # Prompt user to select a circuit provider from a list of provider_options
+        dispatcher.prompt_from_menu(
+            "nautobot get-circuit-connections", "Select a circuit provider", provider_options, offset=menu_offset_value(provider_slug)
+        )
+        return False  # command did not run to completion and therefore should not be logged
+
+    try:
+        provider = Provider.objects.get(slug=provider_slug)
+    except Provider.DoesNotExist:
+        provider_not_found_error_msg = f"Circuit provider with slug {provider_slug} does not exist"
+        dispatcher.send_error(provider_not_found_error_msg)
+        return (CommandStatusChoices.STATUS_FAILED, provider_not_found_error_msg)
+
+    if menu_item_check(circuit_id):
+        circuit_options = [(circuit.cid, circuit.cid) for circuit in Circuit.objects.filter(provider__slug=provider.slug)]
+        if not circuit_options:
+            no_circuits_found_error_msg = f"No circuits with provider slug {provider.slug} were found"
+            dispatcher.send_error(no_circuits_found_error_msg)
+            return (CommandStatusChoices.STATUS_SUCCEEDED, no_circuits_found_error_msg)
+        dispatcher.prompt_from_menu(
+            f"nautobot get-circuit-connections {provider_slug}", "Select a circuit", circuit_options, offset=menu_offset_value(circuit_id)
+        )
+        return False  # command did not run to completion and therefore should not be logged
+
+    try:
+        circuit = Circuit.objects.get(cid=circuit_id)
+    except Circuit.DoesNotExist:
+        cid_not_found_msg = f"Circuit with circuit ID {circuit_id} not found"
+        dispatcher.send_error(cid_not_found_msg)
+        return (CommandStatusChoices.STATUS_FAILED, cid_not_found_msg)
+
+    if menu_item_check(circuit_id):
+        prompt_for_circuit(
+            "nautobot get-circuit-connections",
+            "Get Nautobot Circuit Connections",
+            dispatcher,
+            offset=menu_offset_value(circuit_id),
+        )
+        return False  # command did not run to completion and therefore should not be logged
+
+    # Ensure the termination endpoints are present, otherwise set to a string value
+    try:
+        term_a = circuit.termination_a.trace()[0][2]
+    except (AttributeError, IndexError):
+        term_a = "No A Side Connection in Database"
+    try:
+        term_z = circuit.termination_z.trace()[0][2]
+    except (AttributeError, IndexError):
+        term_z = "No Z Side Connection in Database"
+
+    if term_a != "No A Side Connection in Database":
+        endpoint_info_a = analyze_circuit_endpoints(term_a)
+    else:
+        endpoint_info_a = term_a
+
+    if term_z != "No Z Side Connection in Database":
+        endpoint_info_z = analyze_circuit_endpoints(term_z)
+    else:
+        endpoint_info_z = term_z
+
+    dispatcher.send_blocks(
+        dispatcher.command_response_header(
+            "nautobot",
+            "get-circuit-connections",
+            [("Provider Name", provider.slug), ("Circuit ID", circuit.cid)],
+            "circuit connection info",
+            nautobot_logo(dispatcher),
+        )
+    )
+
+    header = ["Side", "Connecting Object"]
+    rows = [("A", endpoint_info_a), ("Z", endpoint_info_z)]
+
+    dispatcher.send_large_table(header, rows)
     return CommandStatusChoices.STATUS_SUCCEEDED
